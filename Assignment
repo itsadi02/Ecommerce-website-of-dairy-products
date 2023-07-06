@@ -1,0 +1,75 @@
+import requests
+from bs4 import BeautifulSoup
+import csv
+
+def get_product_details(url):
+    response = requests.get(url)
+    soup = BeautifulSoup(response.content, 'html.parser')
+
+    product_name = soup.find('span', {'class': 'a-size-medium a-color-base a-text-normal'}).text.strip()
+    product_price = soup.find('span', {'class': 'a-offscreen'}).text.strip()
+    rating = soup.find('span', {'class': 'a-icon-alt'}).text.strip().split(' ')[0]
+    review_count = soup.find('span', {'class': 'a-size-base'}).text.strip().replace(',', '')
+    
+    product_details = {
+        'URL': url,
+        'Product Name': product_name,
+        'Product Price': product_price,
+        'Rating': rating,
+        'Number of Reviews': review_count
+    }
+    return product_details
+
+def scrape_products(url):
+    products = []
+    for page in range(1, 21):  # Scrape 20 pages
+        page_url = f"{url}&page={page}"
+        response = requests.get(page_url)
+        soup = BeautifulSoup(response.content, 'html.parser')
+
+        product_links = soup.find_all('a', {'class': 'a-link-normal a-text-normal'})
+        for link in product_links:
+            product_url = 'https://www.amazon.in' + link['href']
+            product_details = get_product_details(product_url)
+            products.append(product_details)
+
+    return products
+
+def scrape_product_details(product_urls):
+    product_details = []
+    for url in product_urls:
+        response = requests.get(url)
+        soup = BeautifulSoup(response.content, 'html.parser')
+
+        description = soup.find('div', {'id': 'productDescription'}).text.strip()
+        asin = soup.find('th', text='ASIN').find_next_sibling('td').text.strip()
+        product_description = soup.find('div', {'id': 'productDescription'}).text.strip()
+        manufacturer = soup.find('th', text='Manufacturer').find_next_sibling('td').text.strip()
+
+        product_info = {
+            'URL': url,
+            'Description': description,
+            'ASIN': asin,
+            'Product Description': product_description,
+            'Manufacturer': manufacturer
+        }
+        product_details.append(product_info)
+
+    return product_details
+
+# Scrape products from the main URL
+main_url = "https://www.amazon.in/s?k=bags&crid=2M096C61O4MLT&qid=1653308124&sprefix=ba%2Caps%2C283&ref=sr_pg_"
+products = scrape_products(main_url)
+
+# Extract product URLs
+product_urls = [product['URL'] for product in products[:200]]  # Select first 200 URLs
+
+# Scrape product details for each URL
+product_details = scrape_product_details(product_urls)
+
+# Export data to CSV
+keys = product_details[0].keys()
+with open('product_data.csv', 'w', newline='', encoding='utf-8') as csv_file:
+    writer = csv.DictWriter(csv_file, fieldnames=keys)
+    writer.writeheader()
+    writer.writerows(product_details)
